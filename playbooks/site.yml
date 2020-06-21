@@ -1,0 +1,8 @@
+---
+- name: Bootstrap server for future ansible runs
+  hosts: all
+  remote_user: ubuntu
+  become: yes
+# file: site.yml
+- import_playbook: k8_master.yml
+- import_playbook: k8_worker.yml

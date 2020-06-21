@@ -1,0 +1,102 @@
+---
+# file: roles/common/tasks/main.yml
+
+- name: install docker 
+  remote_user: ubuntu
+  become: yes
+  apt:
+    pkg: 
+    - docker.io
+    - apt-transport-https
+    - curl
+
+# Set net.bridge.bridge-nf-call-iptables to 1 in /etc/sysctl.conf
+#- name: configure sysctl
+ # remote_user: ubuntu
+ # become: yes
+ # sysctl:
+ #   name: net.bridge.bridge-nf-call-iptables
+ #   value: 1
+ #   sysctl_set: yes
+
+    
+  # allow access to certain ports
+- name: Disable SWAP since kubernetes can't work with swap enabled (1/2)
+  remote_user: ubuntu
+  become: yes
+  shell: |
+    iptables -A INPUT -p tcp --dport 6443 -j ACCEPT 
+
+
+  # Allow port forwarding on all nodes
+- name: allow port forwarding
+  remote_user: ubuntu
+  become: yes
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PermitRootLogin no'
+    insertafter: '^PermitRootLogin no'
+    line: AllowTcpForwarding yes
+
+
+# uppdate docker cgroup config
+- name: Ensure the cgroup config is set to systemd
+  remote_user: ubuntu
+  become: yes
+  lineinfile:
+    path: /usr/lib/systemd/system/docker.service
+    regexp: '^ExecStart=/usr/bin/dockerd '
+    insertafter: '^#dockerd '
+    line: ExecStart=/usr/bin/dockerd --exec-opt native.cgroupdriver=systemd -H fd:// --containerd=/run/containerd/containerd.sock 
+
+
+# uppdate docker cgroup config
+- name: Ensure the cgroup config is set to systemd
+  remote_user: ubuntu
+  become: yes
+  lineinfile:
+    path: /boot/firmware/cmdline.txt
+    regexp: '^net.ifnames=0 '
+    insertafter: '^#net.ifnames=0 '
+    line: net.ifnames=0 dwc_otg.lpm_enable=0 console=serial0,115200 console=tty1 root=LABEL=writable rootfstype=ext4 elevator=deadline rootwait fixrtc cgroup_enable=cpuset cgroup_enable=memory cgroup_memory=1 
+
+
+  ##### kubeadm config #######
+
+- name: step 2 of 6 kubeadm bootstrap
+  remote_user: ubuntu
+  become: yes
+  shell: | 
+    curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+
+- name: Copy a new apt get k8 list
+  remote_user: ubuntu
+  become: yes
+  copy:
+    src: ../files/apt-k8-list
+    dest: /etc/apt/sources.list.d/kubernetes.list
+    owner: root
+    group: root
+    mode: '0644'
+    backup: yes
+
+- name: Run the equivalent of "apt-get update" as a separate step
+  remote_user: ubuntu
+  become: yes
+  apt:
+    update_cache: yes
+
+- name: Install a list of packages
+  remote_user: ubuntu
+  become: yes
+  apt:
+    pkg:
+    - kubelet  
+    - kubeadm
+    - kubectl
+
+
+- name: Unconditionally reboot the machine with all defaults
+  remote_user: ubuntu
+  become: yes
+  reboot:

@@ -1,0 +1,7 @@
+[k8_master]
+k8master:30000
+
+[k8_worker]
+k8worker01:30000
+k8worker02:30000
+k8worker03:30000
